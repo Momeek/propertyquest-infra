@@ -1,0 +1,9 @@
+# Copy this file to terraform.tfvars and replace every placeholder.
+# terraform.tfvars is ignored by Git because it contains sensitive values.
+
+jwt_secret           = "replace-with-a-long-random-jwt-secret"
+google_client_secret = "replace-with-google-client-secret"
+fb_client_secret     = "replace-with-facebook-client-secret"
+apple_private_key    = "replace-with-apple-private-key"
+admin_secret_key     = "replace-with-a-long-random-admin-key"
+admin_password       = "replace-with-a-strong-admin-password"
