@@ -227,7 +227,7 @@ jobs:
                   if-no-files-found: ignore
 
             - name: Slack notify drift detected
-              if: ${{ steps.drift.outputs.exit_code == '2' && env.SLACK_WEBHOOK_URL != '' }}
+              if: ${{ steps.drift.outputs.exit_code == '2' && vars.SLACK_WEBHOOK_URL != '' }}
               uses: slackapi/slack-github-action@v1.27.0
               with:
                   payload: |
