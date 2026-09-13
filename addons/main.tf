@@ -61,36 +61,6 @@ resource "helm_release" "external_secrets" {
   }]
 }
 
-resource "aws_eks_pod_identity_association" "external_secrets" {
-  cluster_name    = var.cluster_name
-  namespace       = "external-secrets"
-  service_account = "external-secrets"
-  role_arn        = var.external_secrets_role_arn
-
-  depends_on = [helm_release.external_secrets]
-}
-
-resource "kubernetes_manifest" "secret_store" {
-  manifest = {
-    apiVersion = "external-secrets.io/v1"
-    kind       = "SecretStore"
-    metadata = {
-      name      = "aws-secretsmanager"
-      namespace = "default"
-    }
-    spec = {
-      provider = {
-        aws = {
-          service = "SecretsManager"
-          region  = var.region
-        }
-      }
-    }
-  }
-
-  depends_on = [aws_eks_pod_identity_association.external_secrets]
-}
-
 resource "kubernetes_manifest" "propertyquest_secret" {
   manifest = {
     apiVersion = "external-secrets.io/v1"
@@ -110,10 +80,7 @@ resource "kubernetes_manifest" "propertyquest_secret" {
         creationPolicy = "Owner"
       }
       data = [
-        {
-          secretKey = "db-password"
-          remoteRef = { key = var.secret_name, property = "DB_PASS" }
-        },
+
         {
           secretKey = "jwt_secret"
           remoteRef = { key = var.secret_name, property = "JWT_SECRET" }

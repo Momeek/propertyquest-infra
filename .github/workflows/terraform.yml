@@ -1,0 +1,257 @@
+name: Terraform pipeline
+
+on:
+    pull_request:
+        branches:
+            - main
+    schedule:
+        - cron: "0 */6 * * *"
+    workflow_dispatch:
+        inputs:
+            confirm_apply:
+                description: "Type APPLY to confirm production deployment from main"
+                required: false
+                default: ""
+            run_drift_check:
+                description: "Run drift detection for this manual run"
+                required: false
+                default: "true"
+
+permissions:
+    contents: read
+    id-token: write
+
+concurrency:
+    group: terraform-${{ github.ref }}
+    cancel-in-progress: true
+
+jobs:
+    validate-and-plan:
+        name: Validate and plan on PR
+        if: github.event_name == 'pull_request'
+        runs-on: ubuntu-latest
+        env:
+            AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+            SLACK_WEBHOOK_URL: ${{ vars.SLACK_WEBHOOK_URL }}
+
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+
+            - name: Setup Terraform
+              uses: hashicorp/setup-terraform@v3
+              with:
+                  terraform_version: 1.9.8
+
+            - name: Configure AWS credentials with OIDC
+              uses: aws-actions/configure-aws-credentials@v4
+              with:
+                  role-to-assume: ${{ vars.AWS_ROLE_TO_ASSUME }}
+                  aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+
+            - name: Load Terraform secrets from AWS Secrets Manager
+              shell: bash
+              run: |
+                  SECRET_JSON="$(aws secretsmanager get-secret-value \
+                    --secret-id propertyquest/application \
+                    --query SecretString \
+                    --output text)"
+
+                  echo "TF_VAR_jwt_secret=$(python -c 'import json,sys; print(json.loads(sys.argv[1])[\"JWT_SECRET\"])' "$SECRET_JSON")" >> "$GITHUB_ENV"
+                  echo "TF_VAR_google_client_secret=$(python -c 'import json,sys; print(json.loads(sys.argv[1])[\"GOOGLE_CLIENT_SECRET\"])' "$SECRET_JSON")" >> "$GITHUB_ENV"
+                  echo "TF_VAR_fb_client_secret=$(python -c 'import json,sys; print(json.loads(sys.argv[1])[\"FB_CLIENT_SECRET\"])' "$SECRET_JSON")" >> "$GITHUB_ENV"
+                  echo "TF_VAR_apple_private_key=$(python -c 'import json,sys; print(json.loads(sys.argv[1])[\"APPLE_PRIVATE_KEY\"])' "$SECRET_JSON")" >> "$GITHUB_ENV"
+                  echo "TF_VAR_admin_secret_key=$(python -c 'import json,sys; print(json.loads(sys.argv[1])[\"ADMIN_SECRET_KEY\"])' "$SECRET_JSON")" >> "$GITHUB_ENV"
+                  echo "TF_VAR_admin_password=$(python -c 'import json,sys; print(json.loads(sys.argv[1])[\"ADMIN_PASSWORD\"])' "$SECRET_JSON")" >> "$GITHUB_ENV"
+
+            - name: Terraform init
+              run: terraform init -input=false
+
+            - name: Terraform format check
+              run: terraform fmt -check -recursive
+
+            - name: Terraform validate
+              run: terraform validate
+
+            - name: Terraform plan
+              run: terraform plan -input=false -no-color -out=tfplan
+
+            - name: Upload plan artifact
+              if: always()
+              uses: actions/upload-artifact@v4
+              with:
+                  name: tfplan-feature-${{ github.sha }}
+                  path: tfplan
+                  if-no-files-found: error
+
+            - name: Slack notify on success
+              if: ${{ success() && vars.SLACK_WEBHOOK_URL != '' }}
+              uses: slackapi/slack-github-action@v1.27.0
+              with:
+                  payload: |
+                      {
+                        "text": "Terraform validation and plan succeeded for feature branch ${{ github.ref_name }}."
+                      }
+
+            - name: Slack notify on failure
+              if: ${{ failure() && vars.SLACK_WEBHOOK_URL != '' }}
+              uses: slackapi/slack-github-action@v1.27.0
+              with:
+                  payload: |
+                      {
+                        "text": "Terraform validation failed for feature branch ${{ github.ref_name }}. Review the GitHub Actions run."
+                      }
+
+    apply-main:
+        name: Apply Terraform on main
+        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.event.inputs.confirm_apply == 'APPLY'
+        runs-on: ubuntu-latest
+        environment: production
+        env:
+            AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+            SLACK_WEBHOOK_URL: ${{ vars.SLACK_WEBHOOK_URL }}
+            TF_VAR_region: ${{ vars.AWS_REGION || 'us-east-1' }}
+
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+
+            - name: Setup Terraform
+              uses: hashicorp/setup-terraform@v3
+              with:
+                  terraform_version: 1.9.8
+
+            - name: Configure AWS credentials with OIDC
+              uses: aws-actions/configure-aws-credentials@v4
+              with:
+                  role-to-assume: ${{ vars.AWS_ROLE_TO_ASSUME }}
+                  aws-region: ${{ vars.AWS_REGION }}
+
+            - name: Load Terraform secrets from AWS Secrets Manager
+              shell: bash
+              run: |
+                  SECRET_JSON="$(aws secretsmanager get-secret-value \
+                    --secret-id propertyquest/application \
+                    --query SecretString \
+                    --output text)"
+
+                  echo "TF_VAR_jwt_secret=$(python -c 'import json,sys; print(json.loads(sys.argv[1])[\"JWT_SECRET\"])' "$SECRET_JSON")" >> "$GITHUB_ENV"
+                  echo "TF_VAR_google_client_secret=$(python -c 'import json,sys; print(json.loads(sys.argv[1])[\"GOOGLE_CLIENT_SECRET\"])' "$SECRET_JSON")" >> "$GITHUB_ENV"
+                  echo "TF_VAR_fb_client_secret=$(python -c 'import json,sys; print(json.loads(sys.argv[1])[\"FB_CLIENT_SECRET\"])' "$SECRET_JSON")" >> "$GITHUB_ENV"
+                  echo "TF_VAR_apple_private_key=$(python -c 'import json,sys; print(json.loads(sys.argv[1])[\"APPLE_PRIVATE_KEY\"])' "$SECRET_JSON")" >> "$GITHUB_ENV"
+                  echo "TF_VAR_admin_secret_key=$(python -c 'import json,sys; print(json.loads(sys.argv[1])[\"ADMIN_SECRET_KEY\"])' "$SECRET_JSON")" >> "$GITHUB_ENV"
+                  echo "TF_VAR_admin_password=$(python -c 'import json,sys; print(json.loads(sys.argv[1])[\"ADMIN_PASSWORD\"])' "$SECRET_JSON")" >> "$GITHUB_ENV"
+
+            - name: Terraform init
+              run: terraform init -input=false
+
+            - name: Terraform validate
+              run: terraform validate
+
+            - name: Terraform plan
+              run: terraform plan -input=false -no-color -out=tfplan
+
+            - name: Terraform apply
+              run: terraform apply -input=false -auto-approve tfplan
+
+            - name: Slack notify on success
+              if: ${{ success() && vars.SLACK_WEBHOOK_URL != '' }}
+              uses: slackapi/slack-github-action@v1.27.0
+              with:
+                  payload: |
+                      {
+                        "text": "Terraform apply succeeded on main after approval. Infrastructure has been updated."
+                      }
+
+            - name: Slack notify on failure
+              if: ${{ failure() && vars.SLACK_WEBHOOK_URL != '' }}
+              uses: slackapi/slack-github-action@v1.27.0
+              with:
+                  payload: |
+                      {
+                        "text": "Terraform apply failed on main. Review the GitHub Actions run for details."
+                      }
+
+    drift-detection:
+        name: Detect infrastructure drift
+        if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.event.inputs.run_drift_check == 'true')
+        runs-on: ubuntu-latest
+        env:
+            AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+            SLACK_WEBHOOK_URL: ${{ vars.SLACK_WEBHOOK_URL }}
+            TF_VAR_region: ${{ vars.AWS_REGION || 'us-east-1' }}
+
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+
+            - name: Setup Terraform
+              uses: hashicorp/setup-terraform@v3
+              with:
+                  terraform_version: 1.9.8
+
+            - name: Configure AWS credentials with OIDC
+              uses: aws-actions/configure-aws-credentials@v4
+              with:
+                  role-to-assume: ${{ vars.AWS_ROLE_TO_ASSUME }}
+                  aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+
+            - name: Load Terraform secrets from AWS Secrets Manager
+              shell: bash
+              run: |
+                  SECRET_JSON="$(aws secretsmanager get-secret-value \
+                    --secret-id propertyquest/application \
+                    --query SecretString \
+                    --output text)"
+
+                  echo "TF_VAR_jwt_secret=$(python -c 'import json,sys; print(json.loads(sys.argv[1])[\"JWT_SECRET\"])' "$SECRET_JSON")" >> "$GITHUB_ENV"
+                  echo "TF_VAR_google_client_secret=$(python -c 'import json,sys; print(json.loads(sys.argv[1])[\"GOOGLE_CLIENT_SECRET\"])' "$SECRET_JSON")" >> "$GITHUB_ENV"
+                  echo "TF_VAR_fb_client_secret=$(python -c 'import json,sys; print(json.loads(sys.argv[1])[\"FB_CLIENT_SECRET\"])' "$SECRET_JSON")" >> "$GITHUB_ENV"
+                  echo "TF_VAR_apple_private_key=$(python -c 'import json,sys; print(json.loads(sys.argv[1])[\"APPLE_PRIVATE_KEY\"])' "$SECRET_JSON")" >> "$GITHUB_ENV"
+                  echo "TF_VAR_admin_secret_key=$(python -c 'import json,sys; print(json.loads(sys.argv[1])[\"ADMIN_SECRET_KEY\"])' "$SECRET_JSON")" >> "$GITHUB_ENV"
+                  echo "TF_VAR_admin_password=$(python -c 'import json,sys; print(json.loads(sys.argv[1])[\"ADMIN_PASSWORD\"])' "$SECRET_JSON")" >> "$GITHUB_ENV"
+
+            - name: Terraform init
+              run: terraform init -input=false
+
+            - name: Terraform plan for drift detection
+              id: drift
+              run: |
+                  status=0
+                  terraform plan -detailed-exitcode -input=false -no-color -out=tfdriftplan || status=$?
+                  echo "exit_code=${status}" >> "$GITHUB_OUTPUT"
+
+            - name: Upload drift artifact
+              if: always()
+              uses: actions/upload-artifact@v4
+              with:
+                  name: drift-plan-${{ github.run_id }}
+                  path: tfdriftplan
+                  if-no-files-found: ignore
+
+            - name: Slack notify drift detected
+              if: ${{ steps.drift.outputs.exit_code == '2' && vars.SLACK_WEBHOOK_URL != '' }}
+              uses: slackapi/slack-github-action@v1.27.0
+              with:
+                  payload: |
+                      {
+                        "text": "Terraform drift detected in the AWS infrastructure. Review the latest GitHub Actions run for details."
+                      }
+
+            - name: Slack notify no drift
+              if: ${{ steps.drift.outputs.exit_code == '0' && vars.SLACK_WEBHOOK_URL != '' }}
+              uses: slackapi/slack-github-action@v1.27.0
+              with:
+                  payload: |
+                      {
+                        "text": "Terraform drift check completed successfully with no drift detected."
+                      }
+
+            - name: Slack notify drift check failure
+              if: ${{ steps.drift.outputs.exit_code == '1' && vars.SLACK_WEBHOOK_URL != '' }}
+              uses: slackapi/slack-github-action@v1.27.0
+              with:
+                  payload: |
+                      {
+                        "text": "Terraform drift check failed unexpectedly. Check the GitHub Actions run for troubleshooting."
+                      }
