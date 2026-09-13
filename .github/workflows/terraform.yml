@@ -152,7 +152,7 @@ jobs:
               run: terraform apply -input=false -auto-approve tfplan
 
             - name: Slack notify on success
-              if: ${{ success() && env.SLACK_WEBHOOK_URL != '' }}
+              if: ${{ success() && vars.SLACK_WEBHOOK_URL != '' }}
               uses: slackapi/slack-github-action@v1.27.0
               with:
                   payload: |
@@ -161,7 +161,7 @@ jobs:
                       }
 
             - name: Slack notify on failure
-              if: ${{ failure() && env.SLACK_WEBHOOK_URL != '' }}
+              if: ${{ failure() && vars.SLACK_WEBHOOK_URL != '' }}
               uses: slackapi/slack-github-action@v1.27.0
               with:
                   payload: |
