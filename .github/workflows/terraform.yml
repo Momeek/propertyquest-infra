@@ -175,7 +175,7 @@ jobs:
         runs-on: ubuntu-latest
         env:
             AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
-            SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+            SLACK_WEBHOOK_URL: ${{ vars.SLACK_WEBHOOK_URL }}
             TF_VAR_region: ${{ vars.AWS_REGION || 'us-east-1' }}
 
         steps:
@@ -190,7 +190,7 @@ jobs:
             - name: Configure AWS credentials with OIDC
               uses: aws-actions/configure-aws-credentials@v4
               with:
-                  role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+                  role-to-assume: ${{ vars.AWS_ROLE_TO_ASSUME }}
                   aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
 
             - name: Load Terraform secrets from AWS Secrets Manager
