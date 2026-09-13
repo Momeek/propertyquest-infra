@@ -30,6 +30,9 @@ jobs:
         name: Validate and plan on PR
         if: github.event_name == 'pull_request'
         runs-on: ubuntu-latest
+        env:
+            AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+            SLACK_WEBHOOK_URL: ${{ vars.SLACK_WEBHOOK_URL }}
 
         steps:
             - name: Checkout repository
@@ -85,8 +88,6 @@ jobs:
               if: ${{ success() && vars.SLACK_WEBHOOK_URL != '' }}
               uses: slackapi/slack-github-action@v1.27.0
               with:
-                  webhook-type: incoming-webhook
-                  webhook: ${{ vars.SLACK_WEBHOOK_URL }}
                   payload: |
                       {
                         "text": "Terraform validation and plan succeeded for feature branch ${{ github.ref_name }}."
@@ -96,8 +97,6 @@ jobs:
               if: ${{ failure() && vars.SLACK_WEBHOOK_URL != '' }}
               uses: slackapi/slack-github-action@v1.27.0
               with:
-                  webhook-type: incoming-webhook
-                  webhook: ${{ vars.SLACK_WEBHOOK_URL }}
                   payload: |
                       {
                         "text": "Terraform validation failed for feature branch ${{ github.ref_name }}. Review the GitHub Actions run."
@@ -159,8 +158,6 @@ jobs:
               if: ${{ success() && vars.SLACK_WEBHOOK_URL != '' }}
               uses: slackapi/slack-github-action@v1.27.0
               with:
-                  webhook-type: incoming-webhook
-                  webhook: ${{ vars.SLACK_WEBHOOK_URL }}
                   payload: |
                       {
                         "text": "Terraform apply succeeded on main after approval. Infrastructure has been updated."
@@ -170,8 +167,6 @@ jobs:
               if: ${{ failure() && vars.SLACK_WEBHOOK_URL != '' }}
               uses: slackapi/slack-github-action@v1.27.0
               with:
-                  webhook-type: incoming-webhook
-                  webhook: ${{ vars.SLACK_WEBHOOK_URL }}
                   payload: |
                       {
                         "text": "Terraform apply failed on main. Review the GitHub Actions run for details."
@@ -238,8 +233,6 @@ jobs:
               if: ${{ steps.drift.outputs.exit_code == '2' && vars.SLACK_WEBHOOK_URL != '' }}
               uses: slackapi/slack-github-action@v1.27.0
               with:
-                  webhook-type: incoming-webhook
-                  webhook: ${{ vars.SLACK_WEBHOOK_URL }}
                   payload: |
                       {
                         "text": "Terraform drift detected in the AWS infrastructure. Review the latest GitHub Actions run for details."
@@ -249,8 +242,6 @@ jobs:
               if: ${{ steps.drift.outputs.exit_code == '0' && vars.SLACK_WEBHOOK_URL != '' }}
               uses: slackapi/slack-github-action@v1.27.0
               with:
-                  webhook-type: incoming-webhook
-                  webhook: ${{ vars.SLACK_WEBHOOK_URL }}
                   payload: |
                       {
                         "text": "Terraform drift check completed successfully with no drift detected."
@@ -260,8 +251,6 @@ jobs:
               if: ${{ steps.drift.outputs.exit_code == '1' && vars.SLACK_WEBHOOK_URL != '' }}
               uses: slackapi/slack-github-action@v1.27.0
               with:
-                  webhook-type: incoming-webhook
-                  webhook: ${{ vars.SLACK_WEBHOOK_URL }}
                   payload: |
                       {
                         "text": "Terraform drift check failed unexpectedly. Check the GitHub Actions run for troubleshooting."
