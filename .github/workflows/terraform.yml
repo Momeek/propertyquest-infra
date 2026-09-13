@@ -245,7 +245,7 @@ jobs:
                       }
 
             - name: Slack notify drift check failure
-              if: ${{ steps.drift.outputs.exit_code == '1' && env.SLACK_WEBHOOK_URL != '' }}
+              if: ${{ steps.drift.outputs.exit_code == '1' && vars.SLACK_WEBHOOK_URL != '' }}
               uses: slackapi/slack-github-action@v1.27.0
               with:
                   payload: |
